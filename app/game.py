@@ -36,7 +36,8 @@ class GameState:
             self.paths = []
             self.predictions = []
             self.drawing_revision += 1
-            self.predicted_revision = -1
+            # A new round has no ink yet; the first accepted stroke marks it dirty.
+            self.predicted_revision = self.drawing_revision
             self.structure_revision += 1
             self.round_number += 1
 

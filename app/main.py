@@ -3,17 +3,15 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-import socket
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from .config import settings
 from .game import GameState
@@ -33,24 +31,62 @@ background_tasks: list[asyncio.Task] = []
 
 def render_drawing(paths: list[list[dict]], size: int = 512) -> Image.Image | None:
     segments = [segment for path in paths for segment in path]
-    if not segments:
+    # A handful of tiny movements produces mostly noise, not a useful sketch.
+    if len(segments) < 3:
         return None
-    xs = [float(s[k]) for s in segments for k in ("x1", "x2")]
-    ys = [float(s[k]) for s in segments for k in ("y1", "y2")]
-    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
-    span = max(max_x - min_x, max_y - min_y, 0.08) * 1.25
-    cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
-    left, top = cx - span / 2, cy - span / 2
     image = Image.new("RGB", (size, size), "white")
     draw = ImageDraw.Draw(image)
     for segment in segments:
-        points = [
-            ((segment["x1"] - left) / span * size, (segment["y1"] - top) / span * size),
-            ((segment["x2"] - left) / span * size, (segment["y2"] - top) / span * size),
-        ]
-        width = max(3, round(float(segment.get("width", 0.014)) / span * size))
+        points = [(segment["x1"] * size, segment["y1"] * size),
+                  (segment["x2"] * size, segment["y2"] * size)]
+        width = max(5, round(float(segment.get("width", 0.014)) * size))
         draw.line(points, fill="black", width=width, joint="curve")
-    return image
+        radius = width / 2
+        for x, y in points:
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill="black")
+    ink_bbox = ImageChops.difference(image, Image.new("RGB", image.size, "white")).getbbox()
+    if ink_bbox is None:
+        return None
+    left, top, right, bottom = ink_bbox
+    if max(right - left, bottom - top) < size * 0.04:
+        return None
+    # Center the real ink, with 12.5% whitespace on each side. The result is
+    # always opaque RGB, black-on-white, and contains no browser UI.
+    width, height = right - left, bottom - top
+    side = max(width, height)
+    square = Image.new("RGB", (side, side), "white")
+    square.paste(image.crop(ink_bbox), ((side - width) // 2, (side - height) // 2))
+    result = Image.new("RGB", (size, size), "white")
+    inner = round(size * 0.75)
+    result.paste(square.resize((inner, inner), Image.Resampling.LANCZOS), ((size - inner) // 2, (size - inner) // 2))
+    return result
+
+
+async def predict_paths(paths: list[list[dict]]) -> list[dict]:
+    if predictor is None or not predictor.ready:
+        raise RuntimeError(predictor.error if predictor else "Predictor is not initialized")
+    segment_count = sum(map(len, paths))
+    logger.info("[AI] Prediction requested")
+    logger.info("[AI] Rendering %d stroke segments", segment_count)
+    image = render_drawing(paths)
+    if image is None:
+        logger.info("[AI] Skipping prediction: not enough drawing content yet")
+        return []
+    if settings.save_debug_prediction_images:
+        debug_path = BASE_DIR.parent / "debug" / "prediction-latest.png"
+        debug_path.parent.mkdir(parents=True, exist_ok=True)
+        image.save(debug_path)
+        logger.info("[AI] Saved classifier image: %s", debug_path)
+    logger.info("[AI] Running inference")
+    started = time.monotonic()
+    try:
+        predictions = await asyncio.to_thread(predictor.predict, image)
+    except Exception:
+        logger.exception("[AI ERROR] Prediction failed")
+        raise
+    logger.info("[AI] Prediction completed in %.0fms", (time.monotonic() - started) * 1000)
+    logger.info("[AI] Top predictions: %s", ", ".join(f"{p.label}={p.confidence:.2f}" for p in predictions))
+    return [{"label": p.label, "confidence": p.confidence} for p in predictions]
 
 
 async def broadcast_state() -> None:
@@ -62,8 +98,9 @@ async def broadcast_state() -> None:
 
 
 async def game_loop() -> None:
+    next_prediction_at = 0.0
     while True:
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.1)
         if game.status != "running":
             continue
         if game.remaining() <= 0:
@@ -73,33 +110,50 @@ async def game_loop() -> None:
             continue
         if not predictor or not predictor.ready or game.drawing_revision == game.predicted_revision:
             continue
-        revision = game.drawing_revision
-        structure_revision = game.structure_revision
-        async with game.lock:
-            paths = [[dict(segment) for segment in path] for path in game.paths]
-        image = render_drawing(paths)
-        game.predicted_revision = revision
-        if image is None:
+        if time.monotonic() < next_prediction_at:
             continue
-        results = await asyncio.to_thread(predictor.predict, image)
+        async with game.lock:
+            revision = game.drawing_revision
+            structure_revision = game.structure_revision
+            round_number = game.round_number
+            paths = [[dict(segment) for segment in path] for path in game.paths]
+        next_prediction_at = time.monotonic() + settings.prediction_interval_seconds
+        game.predicted_revision = revision
+        try:
+            results = await predict_paths(paths)
+        except Exception as exc:
+            # Keep the worker alive. A later stroke can trigger a new attempt.
+            predictor.error = f"Prediction failed: {type(exc).__name__}: {exc}"
+            await broadcast_state()
+            continue
         # New stroke segments do not invalidate an in-flight inference: showing a
         # recent snapshot keeps guesses moving during continuous drawing. Clear,
         # undo, and a new round do invalidate it via structure_revision.
-        if game.status != "running" or structure_revision != game.structure_revision:
+        if game.status != "running" or round_number != game.round_number or structure_revision != game.structure_revision:
             continue
-        game.predictions = [{"label": p.label, "confidence": p.confidence} for p in results]
-        if results and results[0].label == game.target and results[0].confidence >= game.threshold:
+        if game.remaining() <= 0:
+            await game.end("timeout")
+            await broadcast_state()
+            continue
+        if not results:
+            continue
+        predictor.error = None
+        game.predictions = results
+        payload = {"type": "prediction", "predictions": results}
+        logger.info("[WS] Broadcasting prediction to %d display client(s)", manager.count("display"))
+        await manager.send_role("display", payload)
+        if results[0]["label"] == game.target and results[0]["confidence"] >= game.threshold:
             await game.end("ai_won")
             logger.info("AI guessed %s in %.1fs", game.target, game.elapsed())
-        await broadcast_state()
-        await asyncio.sleep(max(0.0, settings.prediction_interval_seconds - 0.2))
+            await broadcast_state()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global predictor
     predictor = await asyncio.to_thread(
-        Predictor, LABELS, settings.model_name, settings.model_pretrained, settings.predictor_enabled
+        Predictor, LABELS, settings.model_name, settings.model_pretrained,
+        settings.predictor_enabled, settings.prediction_logit_scale,
     )
     background_tasks.append(asyncio.create_task(game_loop()))
     logger.info("DrawAI ready — display: http://localhost:%d/display", settings.port)
@@ -116,17 +170,17 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("display.html", {"request": request})
+    return templates.TemplateResponse(request, "display.html")
 
 
 @app.get("/draw", response_class=HTMLResponse)
 async def draw_page(request: Request):
-    return templates.TemplateResponse("draw.html", {"request": request})
+    return templates.TemplateResponse(request, "draw.html")
 
 
 @app.get("/display", response_class=HTMLResponse)
 async def display_page(request: Request):
-    return templates.TemplateResponse("display.html", {"request": request})
+    return templates.TemplateResponse(request, "display.html")
 
 
 def draw_url(request: Request) -> str:
@@ -152,6 +206,22 @@ async def qr_code(request: Request):
 async def status(request: Request):
     model_status = predictor.status if predictor else {"ready": False, "error": "Loading model"}
     return {"ok": True, "predictor": model_status, "drawUrl": draw_url(request), "game": game.snapshot("display", model_status)}
+
+
+@app.post("/api/debug/predict-current")
+async def debug_predict_current():
+    async with game.lock:
+        paths = [[dict(segment) for segment in path] for path in game.paths]
+    stroke_count = sum(map(len, paths))
+    if predictor is None or not predictor.ready:
+        return JSONResponse({"strokeCount": stroke_count, "error": predictor.error if predictor else "Predictor not loaded"}, status_code=503)
+    try:
+        predictions = await predict_paths(paths)
+    except Exception as exc:
+        return JSONResponse({"strokeCount": stroke_count, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+    if not predictions:
+        return JSONResponse({"strokeCount": stroke_count, "error": "Not enough drawing content"}, status_code=422)
+    return {"strokeCount": stroke_count, "predictions": predictions}
 
 
 @app.websocket("/ws/{role}")

@@ -37,3 +37,5 @@ class ConnectionManager:
                 for socket in stale:
                     self.connections[role].discard(socket)
 
+    def count(self, role: str) -> int:
+        return len(self.connections[role])
