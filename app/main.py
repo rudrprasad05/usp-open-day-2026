@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -15,6 +15,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 from .config import settings
 from .game import GameState
+from .leaderboard import Leaderboard
 from .labels import LABELS
 from .predictor import Predictor
 from .websocket_manager import ConnectionManager
@@ -24,6 +25,7 @@ logger = logging.getLogger("drawai")
 BASE_DIR = Path(__file__).resolve().parent
 
 game = GameState(settings.game_duration_seconds, settings.win_confidence_threshold)
+leaderboard = Leaderboard(Path(settings.leaderboard_db_path)) if settings.leaderboard_db_path else Leaderboard()
 manager = ConnectionManager()
 predictor: Predictor | None = None
 background_tasks: list[asyncio.Task] = []
@@ -80,12 +82,14 @@ async def predict_paths(paths: list[list[dict]]) -> list[dict]:
     logger.info("[AI] Running inference")
     started = time.monotonic()
     try:
-        predictions = await asyncio.to_thread(predictor.predict, image)
+        # The game needs every class score, including targets outside the top five.
+        # The predictor is never told which target the current round uses.
+        predictions = await asyncio.to_thread(predictor.predict_all, image)
     except Exception:
         logger.exception("[AI ERROR] Prediction failed")
         raise
     logger.info("[AI] Prediction completed in %.0fms", (time.monotonic() - started) * 1000)
-    logger.info("[AI] Top predictions: %s", ", ".join(f"{p.label}={p.confidence:.2f}" for p in predictions))
+    logger.info("[AI] Top predictions: %s", ", ".join(f"{p.label}={p.confidence:.2f}" for p in predictions[:5]))
     return [{"label": p.label, "confidence": p.confidence} for p in predictions]
 
 
@@ -97,6 +101,31 @@ async def broadcast_state() -> None:
     )
 
 
+async def broadcast_leaderboard() -> None:
+    entries = await asyncio.to_thread(leaderboard.top, 20)
+    await asyncio.gather(
+        manager.send_role("display", {"type": "leaderboard", "entries": entries[:5]}),
+        manager.send_role("leaderboard", {"type": "leaderboard", "entries": entries}),
+    )
+
+
+async def finish_current_round(outcome: str) -> None:
+    finished, completed = await game.finish_round(outcome)
+    if not finished:
+        return
+    logger.info("Round %d/%d finished: %s, score %.1f%%", game.round_number, 5, outcome, game.round_results[-1].score)
+    if completed:
+        try:
+            _, rank = await asyncio.to_thread(leaderboard.save_session, completed)
+            await game.set_leaderboard_rank(completed.session_id, rank)
+            logger.info("Saved session %s for %s: %.1f%%, rank #%d", completed.session_id, completed.player_name, completed.score, rank)
+        except Exception:
+            logger.exception("Could not save completed session to SQLite")
+    await broadcast_state()
+    if completed:
+        await broadcast_leaderboard()
+
+
 async def game_loop() -> None:
     next_prediction_at = 0.0
     while True:
@@ -104,9 +133,7 @@ async def game_loop() -> None:
         if game.status != "running":
             continue
         if game.remaining() <= 0:
-            await game.end("timeout")
-            logger.info("Round %d timed out", game.round_number)
-            await broadcast_state()
+            await finish_current_round("timeout")
             continue
         if not predictor or not predictor.ready or game.drawing_revision == game.predicted_revision:
             continue
@@ -132,25 +159,27 @@ async def game_loop() -> None:
         if game.status != "running" or round_number != game.round_number or structure_revision != game.structure_revision:
             continue
         if game.remaining() <= 0:
-            await game.end("timeout")
-            await broadcast_state()
+            await finish_current_round("timeout")
             continue
         if not results:
             continue
         predictor.error = None
-        game.predictions = results
-        payload = {"type": "prediction", "predictions": results}
+        accepted, ai_recognized = await game.apply_predictions(results, round_number, structure_revision)
+        if not accepted:
+            continue
+        payload = {"type": "prediction", "predictions": results[:5]}
         logger.info("[WS] Broadcasting prediction to %d display client(s)", manager.count("display"))
         await manager.send_role("display", payload)
-        if results[0]["label"] == game.target and results[0]["confidence"] >= game.threshold:
-            await game.end("ai_won")
+        if ai_recognized:
             logger.info("AI guessed %s in %.1fs", game.target, game.elapsed())
-            await broadcast_state()
+            await finish_current_round("ai_won")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global predictor
+    leaderboard.initialize()
+    logger.info("Leaderboard SQLite database: %s", leaderboard.path)
     predictor = await asyncio.to_thread(
         Predictor, LABELS, settings.model_name, settings.model_pretrained,
         settings.predictor_enabled, settings.prediction_logit_scale,
@@ -183,6 +212,11 @@ async def display_page(request: Request):
     return templates.TemplateResponse(request, "display.html")
 
 
+@app.get("/leaderboard", response_class=HTMLResponse)
+async def leaderboard_page(request: Request):
+    return templates.TemplateResponse(request, "leaderboard.html")
+
+
 def draw_url(request: Request) -> str:
     if settings.public_host:
         value = settings.public_host.rstrip("/")
@@ -208,6 +242,11 @@ async def status(request: Request):
     return {"ok": True, "predictor": model_status, "drawUrl": draw_url(request), "game": game.snapshot("display", model_status)}
 
 
+@app.get("/api/leaderboard")
+async def leaderboard_api(limit: int = Query(default=10, ge=1, le=100)):
+    return {"entries": await asyncio.to_thread(leaderboard.top, limit)}
+
+
 @app.post("/api/debug/predict-current")
 async def debug_predict_current():
     async with game.lock:
@@ -221,27 +260,45 @@ async def debug_predict_current():
         return JSONResponse({"strokeCount": stroke_count, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
     if not predictions:
         return JSONResponse({"strokeCount": stroke_count, "error": "Not enough drawing content"}, status_code=422)
-    return {"strokeCount": stroke_count, "predictions": predictions}
+    return {"strokeCount": stroke_count, "predictions": predictions[:5]}
 
 
 @app.websocket("/ws/{role}")
 async def websocket_endpoint(websocket: WebSocket, role: str):
-    if role not in {"draw", "display"}:
+    if role not in {"draw", "display", "leaderboard"}:
         await websocket.close(code=1008)
         return
     await manager.connect(websocket, role)
     try:
-        status = predictor.status if predictor else {"ready": False, "error": "Loading model"}
-        await websocket.send_json(game.snapshot(role, status))
+        if role == "leaderboard":
+            await websocket.send_json({"type": "leaderboard", "entries": await asyncio.to_thread(leaderboard.top, 20)})
+        else:
+            status = predictor.status if predictor else {"ready": False, "error": "Loading model"}
+            await websocket.send_json(game.snapshot(role, status))
+            if role == "display":
+                await websocket.send_json({"type": "leaderboard", "entries": await asyncio.to_thread(leaderboard.top, 5)})
         while True:
             message = await websocket.receive_json()
             event = message.get("type")
             if role != "draw" and event != "ping":
                 continue
-            if event in {"start", "next"}:
-                await game.start()
-                logger.info("Started round %d", game.round_number)
-                await broadcast_state()
+            if event == "start":
+                try:
+                    started = await game.start_session(message.get("playerName"))
+                except ValueError as exc:
+                    await websocket.send_json({"type": "error", "message": str(exc)})
+                    continue
+                if started:
+                    logger.info("Started session for %s, round 1/5", game.player_name)
+                    await broadcast_state()
+                else:
+                    await websocket.send_json({"type": "error", "message": "Finish the current session first."})
+            elif event == "next":
+                if await game.next_round():
+                    logger.info("Started round %d/5", game.round_number)
+                    await broadcast_state()
+                else:
+                    await websocket.send_json({"type": "error", "message": "This round is not ready to advance."})
             elif event == "stroke":
                 try:
                     segment = await game.add_segment(message)
@@ -256,8 +313,7 @@ async def websocket_endpoint(websocket: WebSocket, role: str):
                 await game.undo()
                 await broadcast_state()
             elif event == "done":
-                await game.end("stopped")
-                await broadcast_state()
+                await finish_current_round("done")
             elif event == "ping":
                 await websocket.send_json({"type": "pong", "serverNow": time.time()})
     except WebSocketDisconnect:

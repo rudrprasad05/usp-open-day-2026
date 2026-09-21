@@ -23,7 +23,12 @@
       <div class="canvas-wrap">
         <canvas id="canvas" aria-label="Live mirrored drawing"></canvas>
         <div id="emptyState" class="empty-state"><span>✦</span><strong>Waiting for the artist</strong><small>Start a game on the phone</small></div>
-        <div id="result" class="result hidden"></div>
+        <div id="result" class="result hidden">
+          <span id="resultKicker" class="kicker"></span>
+          <strong id="resultMain"></strong>
+          <span id="resultDetail" class="answer"></span>
+          <span id="resultTime" class="time"></span>
+        </div>
       </div>
     </section>
     <aside class="ai-card">
@@ -33,6 +38,10 @@
         <div class="prediction top placeholder"><div class="rank">01</div><div class="guess"><strong>Waiting</strong><div class="bar"><i></i></div></div><div class="pct">—</div></div>
       </div>
       <p class="confidence-note">Relative confidence across 25 possible objects</p>
+      <section class="mini-board" aria-label="Top leaderboard scores">
+        <div class="mini-board-head"><h2>TOP SCORES</h2><a href="/leaderboard">Full board →</a></div>
+        <ol id="miniScores"><li class="board-empty">First scores coming soon</li></ol>
+      </section>
       <div class="join-card">
         <img src="/qr.png" alt="QR code to open the drawing controller" onerror="this.hidden=true">
         <div><strong>YOU’RE THE ARTIST</strong><span>Scan to open the drawing pad</span></div>
@@ -42,4 +51,3 @@
   <footer><span>UNIVERSITY OPEN DAY</span><span>LIVE ZERO-SHOT IMAGE RECOGNITION</span><span id="footerState">WAITING FOR PLAYER</span></footer>
 </body>
 </html>
-

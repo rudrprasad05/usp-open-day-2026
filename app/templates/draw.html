@@ -14,29 +14,55 @@
       <div class="brand"><span class="brand-mark">D</span><span>DrawAI</span></div>
       <div id="connection" class="connection offline"><i></i><span>Connecting</span></div>
     </header>
-    <section class="challenge">
-      <div>
-        <p class="eyebrow">Your challenge</p>
-        <h1 id="target">Ready?</h1>
-      </div>
-      <div id="timer" class="timer" aria-label="Time remaining">30</div>
+    <section id="entryScreen" class="entry-screen">
+      <p class="eyebrow">Five drawings · One score</p>
+      <h1>Ready to draw?</h1>
+      <p>Show the AI what you can draw. Your best recognition score from each round counts.</p>
+      <form id="entryForm">
+        <label for="playerName">Enter your name / nickname / school</label>
+        <input id="playerName" name="playerName" maxlength="40" autocomplete="nickname" required>
+        <p id="entryError" class="form-error" role="alert"></p>
+        <button class="primary" type="submit">START GAME <span aria-hidden="true">→</span></button>
+      </form>
+      <div class="entry-footer">5 unique objects · 30 seconds each</div>
     </section>
-    <section class="canvas-wrap">
-      <canvas id="canvas" aria-label="Drawing canvas"></canvas>
-      <div id="canvasMessage" class="canvas-message">
-        <strong>Ready to draw?</strong>
-        <span>The word only appears on this screen.</span>
-        <button id="start" class="primary">Start game</button>
+    <section id="playScreen" class="play-screen hidden">
+      <div class="challenge">
+        <div>
+          <p id="roundLabel" class="eyebrow">Round 1 of 5</p>
+          <h1 id="target">Draw:</h1>
+        </div>
+        <div id="timer" class="timer" aria-label="Time remaining">30</div>
       </div>
+      <div id="progress" class="round-progress" aria-label="Five round progress"></div>
+      <div class="canvas-wrap">
+        <canvas id="canvas" aria-label="Drawing canvas"></canvas>
+        <div id="canvasMessage" class="canvas-message hidden">
+          <span id="resultKicker" class="eyebrow">Round complete</span>
+          <strong id="resultTitle">CAT</strong>
+          <span>AI Recognition Score</span>
+          <b id="resultScore">0%</b>
+        </div>
+      </div>
+      <div class="tools">
+        <button id="undo" disabled><span aria-hidden="true">↶</span> Undo</button>
+        <button id="clear" disabled><span aria-hidden="true">×</span> Clear</button>
+        <button id="done" class="done" disabled>Done <span aria-hidden="true">→</span></button>
+      </div>
+      <button id="next" class="next hidden">Next drawing <span aria-hidden="true">→</span></button>
+      <p id="playHint" class="hint">Draw with your finger or stylus</p>
     </section>
-    <div class="tools">
-      <button id="undo" disabled><span aria-hidden="true">↶</span> Undo</button>
-      <button id="clear" disabled><span aria-hidden="true">×</span> Clear</button>
-      <button id="done" class="done" disabled>Done <span aria-hidden="true">→</span></button>
-    </div>
-    <button id="next" class="next hidden">Next game <span aria-hidden="true">→</span></button>
-    <p class="hint">Draw with your finger or stylus</p>
+    <section id="finalScreen" class="final-screen hidden">
+      <p class="eyebrow">Five rounds complete</p>
+      <h1>Great job, <span id="finalName"></span>!</h1>
+      <h2>Your results</h2>
+      <ol id="finalRounds" class="final-rounds"></ol>
+      <div class="final-total"><span>FINAL SCORE</span><strong id="finalScore">0.0 / 100</strong></div>
+      <p id="finalRank" class="final-rank">Leaderboard position —</p>
+      <a class="next final-link" href="/leaderboard">View leaderboard <span aria-hidden="true">→</span></a>
+      <button id="playAgain" class="primary final-action">Play again</button>
+      <button id="newPlayer" class="text-action">New player</button>
+    </section>
   </main>
 </body>
 </html>
-

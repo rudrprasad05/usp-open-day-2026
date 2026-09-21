@@ -21,6 +21,7 @@ class Settings:
     model_pretrained: str = os.getenv("OPENCLIP_PRETRAINED", "laion2b_s34b_b79k")
     predictor_enabled: bool = _bool_env("PREDICTOR_ENABLED", True)
     save_debug_prediction_images: bool = _bool_env("SAVE_DEBUG_PREDICTION_IMAGES", False)
+    leaderboard_db_path: str | None = os.getenv("LEADERBOARD_DB_PATH")
 
 
 settings = Settings()
