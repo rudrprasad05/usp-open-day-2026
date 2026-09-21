@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0d12">
+  <title>Can You Beat the AI? — DrawAI</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/display.css') }}">
+  <script src="{{ url_for('static', path='/js/display.js') }}" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">D</span><span>DrawAI</span></div>
+    <h1>CAN YOU <em>BEAT</em> THE AI?</h1>
+    <div id="connection" class="connection offline"><i></i><span>Connecting</span></div>
+  </header>
+  <main class="arena">
+    <section class="drawing-card">
+      <div class="card-head">
+        <div><span class="live-dot"></span><span id="roundLabel">LIVE DRAWING</span></div>
+        <div id="timer" class="timer"><span>TIME LEFT</span><strong>30</strong><small>SEC</small></div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="canvas" aria-label="Live mirrored drawing"></canvas>
+        <div id="emptyState" class="empty-state"><span>✦</span><strong>Waiting for the artist</strong><small>Start a game on the phone</small></div>
+        <div id="result" class="result hidden"></div>
+      </div>
+    </section>
+    <aside class="ai-card">
+      <p class="eyebrow">AI THINKS...</p>
+      <div id="modelState" class="model-state">Model warming up</div>
+      <div id="predictions" class="predictions">
+        <div class="prediction top placeholder"><div class="rank">01</div><div class="guess"><strong>Waiting</strong><div class="bar"><i></i></div></div><div class="pct">—</div></div>
+      </div>
+      <p class="confidence-note">Relative confidence across 25 possible objects</p>
+      <div class="join-card">
+        <img src="/qr.png" alt="QR code to open the drawing controller" onerror="this.hidden=true">
+        <div><strong>YOU’RE THE ARTIST</strong><span>Scan to open the drawing pad</span></div>
+      </div>
+    </aside>
+  </main>
+  <footer><span>UNIVERSITY OPEN DAY</span><span>LIVE ZERO-SHOT IMAGE RECOGNITION</span><span id="footerState">WAITING FOR PLAYER</span></footer>
+</body>
+</html>
+

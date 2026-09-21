@@ -1,0 +1,2 @@
+"""DrawAI Open Day application."""
+

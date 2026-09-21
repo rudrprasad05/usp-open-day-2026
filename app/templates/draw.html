@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#1557ff">
+  <title>DrawAI — Draw</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/draw.css') }}">
+  <script src="{{ url_for('static', path='/js/draw.js') }}" defer></script>
+</head>
+<body>
+  <main class="phone-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">D</span><span>DrawAI</span></div>
+      <div id="connection" class="connection offline"><i></i><span>Connecting</span></div>
+    </header>
+    <section class="challenge">
+      <div>
+        <p class="eyebrow">Your challenge</p>
+        <h1 id="target">Ready?</h1>
+      </div>
+      <div id="timer" class="timer" aria-label="Time remaining">30</div>
+    </section>
+    <section class="canvas-wrap">
+      <canvas id="canvas" aria-label="Drawing canvas"></canvas>
+      <div id="canvasMessage" class="canvas-message">
+        <strong>Ready to draw?</strong>
+        <span>The word only appears on this screen.</span>
+        <button id="start" class="primary">Start game</button>
+      </div>
+    </section>
+    <div class="tools">
+      <button id="undo" disabled><span aria-hidden="true">↶</span> Undo</button>
+      <button id="clear" disabled><span aria-hidden="true">×</span> Clear</button>
+      <button id="done" class="done" disabled>Done <span aria-hidden="true">→</span></button>
+    </div>
+    <button id="next" class="next hidden">Next game <span aria-hidden="true">→</span></button>
+    <p class="hint">Draw with your finger or stylus</p>
+  </main>
+</body>
+</html>
+
