@@ -17,7 +17,7 @@ The percentages are relative confidence scores across the configured labels, not
 
 On `/draw`, the visitor enters one free-form name, nickname, school, or team name (1–40 visible characters). The server starts a new session and samples five **unique** targets from `app/labels.py` at once. Only the current target appears on the phone; the public `/display` never receives it while the round is active. The phone shows progress from round 1 of 5 through round 5 of 5.
 
-The AI continues to score **all 25 labels** while drawing. For each round, the server keeps the **highest confidence ever assigned to that round's requested target**, even when it is not in the displayed top five. Later lower guesses, Clear, and Undo do not erase that best score. The AI win threshold only determines whether the round ends early with “AI GOT IT”; pressing Done or reaching the 30-second timeout still records the best target confidence. The next round starts when the visitor taps **Next drawing**.
+The AI continues to show live guesses while drawing, but these guesses do not score or end the round, even at high confidence. The player can keep drawing until they press **Done** or the timer expires. The server then freezes the drawing, runs a fresh inference over **all 25 labels**, and scores the confidence assigned to the requested target—even if that target is outside the displayed top five. Earlier guesses and historical highs are ignored. The next round starts when the visitor taps **Next drawing**.
 
 After five rounds, the backend averages the five percentage scores equally and saves one result to SQLite. For example, `82%, 61%, 94%, 73%, 90%` yields `80.0 / 100`. The final phone screen shows every round, the average, and leaderboard rank. **Play again** creates a new session with five new unique targets; **New player** returns to name entry.
 
@@ -95,7 +95,6 @@ Environment variables keep common changes out of the code:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `GAME_DURATION_SECONDS` | `30` | Round duration |
-| `WIN_CONFIDENCE_THRESHOLD` | `0.55` | Minimum top-score needed for an AI win |
 | `PREDICTION_INTERVAL_SECONDS` | `0.65` | Minimum inference interval |
 | `PREDICTION_LOGIT_SCALE` | `25` | Softmax scaling for relative confidence; larger values make guesses more peaked |
 | `OPENCLIP_MODEL` | `ViT-B-32` | OpenCLIP model architecture |
@@ -105,7 +104,7 @@ Environment variables keep common changes out of the code:
 | `SAVE_DEBUG_PREDICTION_IMAGES` | `false` | Overwrite `debug/prediction-latest.png` with the square image sent to the model |
 | `LEADERBOARD_DB_PATH` | `data/drawai.db` | Local SQLite database path |
 
-Example: `GAME_DURATION_SECONDS=45 WIN_CONFIDENCE_THRESHOLD=0.45 ./run.sh`.
+Example: `GAME_DURATION_SECONDS=45 ./run.sh`.
 
 Edit `app/labels.py` to change the object list. Restart the server so the model can rebuild and cache the text embeddings.
 
@@ -137,7 +136,7 @@ During a round, `POST /api/debug/predict-current` directly classifies the curren
 curl -X POST http://localhost:8888/api/debug/predict-current
 ```
 
-It returns HTTP 422 if there is too little ink, 503 if the model failed to load, or 500 with an error if inference fails. Enable `SAVE_DEBUG_PREDICTION_IMAGES=true` while diagnosing image quality; the file is overwritten after each prediction, not accumulated. The server logs prediction requests, segment counts, inference time, guesses, broadcasts, and full tracebacks for failures. Guesses are broadcast regardless of the winning threshold; that threshold controls only the `AI GOT IT!` outcome.
+It returns HTTP 422 if there is too little ink, 503 if the model failed to load, or 500 with an error if inference fails. Enable `SAVE_DEBUG_PREDICTION_IMAGES=true` while diagnosing image quality; the file is overwritten after each prediction, not accumulated. The server logs prediction requests, segment counts, inference time, guesses, broadcasts, and full tracebacks for failures. Live guesses never end a round or contribute to its score.
 
 ## Reliability notes
 

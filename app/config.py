@@ -12,7 +12,6 @@ def _bool_env(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class Settings:
     game_duration_seconds: int = int(os.getenv("GAME_DURATION_SECONDS", "30"))
-    win_confidence_threshold: float = float(os.getenv("WIN_CONFIDENCE_THRESHOLD", "0.55"))
     prediction_interval_seconds: float = float(os.getenv("PREDICTION_INTERVAL_SECONDS", "0.65"))
     prediction_logit_scale: float = float(os.getenv("PREDICTION_LOGIT_SCALE", "25"))
     public_host: str | None = os.getenv("PUBLIC_HOST")

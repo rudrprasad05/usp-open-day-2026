@@ -131,11 +131,11 @@
     }
   }
   function applyState(data) {
-    const wasRunning = state.status === 'running';
+    const wasActive = state.status === 'running' || state.status === 'finalizing';
     state = data;
     clockOffset = Date.now() / 1000 - data.serverNow;
     if (data.status !== 'session_complete') entryForced = false;
-    if (data.status === 'session_complete' && wasRunning) finalRevealed = false;
+    if (data.status === 'session_complete' && wasActive) finalRevealed = false;
     else if (data.status !== 'session_complete') finalRevealed = true;
     const showEntry = data.status === 'waiting' || entryForced;
     const showFinal = data.status === 'session_complete' && !entryForced && finalRevealed;
@@ -150,16 +150,17 @@
       redraw(data.paths || []);
       const running = data.status === 'running';
       [undo, clear, done].forEach(button => button.disabled = !running);
-      next.classList.toggle('hidden', running);
+      next.classList.toggle('hidden', running || data.status === 'finalizing');
       next.innerHTML = data.status === 'session_complete'
         ? 'See final score <span aria-hidden="true">→</span>'
         : 'Next drawing <span aria-hidden="true">→</span>';
       message.classList.toggle('hidden', running);
       if (!running) {
-        $('#resultKicker').textContent = data.outcome === 'timeout' ? "Time's up!" :
-          data.outcome === 'ai_won' ? 'AI got it!' : 'Round complete';
+        $('#resultKicker').textContent = data.status === 'finalizing' ? 'Scoring your drawing…' :
+          data.outcome === 'timeout' ? "Time's up!" : 'Round complete';
         $('#resultTitle').textContent = data.target?.toUpperCase() || '';
-        $('#resultScore').textContent = `${Math.round(data.roundScore || 0)}%`;
+        $('#resultScore').textContent = data.status === 'finalizing'
+          ? '…' : `${Math.round(data.roundScore || 0)}%`;
       }
     }
     tick();
@@ -190,7 +191,7 @@
   };
   undo.onclick = () => send({type: 'undo'});
   clear.onclick = () => send({type: 'clear'});
-  done.onclick = () => send({type: 'done'});
+  done.onclick = () => send({type: 'finish_round'});
   $('#playAgain').onclick = () => send({type: 'start', playerName: state.playerName});
   $('#newPlayer').onclick = () => {
     entryForced = true;

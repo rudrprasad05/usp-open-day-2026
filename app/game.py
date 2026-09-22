@@ -44,17 +44,22 @@ class CompletedSession:
     round_results: tuple[RoundResult, ...]
 
 
+@dataclass(frozen=True)
+class FinalizationJob:
+    session_id: str
+    round_number: int
+    paths: list[list[dict[str, Any]]]
+
+
 @dataclass
 class GameState:
     duration: int
-    threshold: float
     status: str = "waiting"
     player_name: str | None = None
     session_id: str | None = None
     session_targets: list[str] = field(default_factory=list)
     current_round: int = 0  # Zero-based internally.
     round_results: list[RoundResult] = field(default_factory=list)
-    best_target_confidence: float = 0.0
     session_started_at: float | None = None
     session_completed: bool = False
     final_score: float | None = None
@@ -82,7 +87,6 @@ class GameState:
         self.outcome = None
         self.paths = []
         self.predictions = []
-        self.best_target_confidence = 0.0
         self.drawing_revision += 1
         self.predicted_revision = self.drawing_revision
         self.structure_revision += 1
@@ -140,7 +144,6 @@ class GameState:
                 self.predictions = []
                 self.drawing_revision += 1
                 self.structure_revision += 1
-                # best_target_confidence intentionally survives Clear.
 
     async def undo(self) -> None:
         async with self.lock:
@@ -149,38 +152,49 @@ class GameState:
                 self.predictions = []
                 self.drawing_revision += 1
                 self.structure_revision += 1
-                # best_target_confidence intentionally survives Undo.
 
     async def apply_predictions(
         self, all_predictions: list[dict[str, Any]], round_number: int, structure_revision: int
-    ) -> tuple[bool, bool]:
-        """Returns (accepted, AI recognized target). The model never receives target."""
+    ) -> bool:
+        """Live guesses are spectator feedback only; they never score or end a round."""
         async with self.lock:
             if (self.status != "running" or self.round_number != round_number
                     or self.structure_revision != structure_revision or self.remaining() <= 0):
-                return False, False
+                return False
+            self.predictions = all_predictions[:5]
+            return True
+
+    async def begin_finalization(self, reason: str) -> FinalizationJob | None:
+        """Atomically freeze the submitted drawing; duplicate Done/timeout is ignored."""
+        async with self.lock:
+            if self.status != "running" or self.target is None or self.session_id is None:
+                return None
+            self.outcome = "timeout" if self.remaining() <= 0 else reason
+            self.ended_at = time.time()
+            self.status = "finalizing"
+            return FinalizationJob(
+                self.session_id,
+                self.round_number,
+                [[dict(segment) for segment in path] for path in self.paths],
+            )
+
+    async def complete_finalization(
+        self, job: FinalizationJob, all_predictions: list[dict[str, Any]]
+    ) -> tuple[bool, CompletedSession | None]:
+        """Use only the fresh final inference to score the requested class."""
+        async with self.lock:
+            if (self.status != "finalizing" or self.session_id != job.session_id
+                    or self.round_number != job.round_number or self.target is None):
+                return False, None
             self.predictions = all_predictions[:5]
             target_confidence = next(
                 (float(item["confidence"]) for item in all_predictions if item["label"] == self.target), 0.0
             )
-            self.best_target_confidence = max(self.best_target_confidence, target_confidence)
-            top = all_predictions[0] if all_predictions else None
-            ai_recognized = bool(
-                top and top["label"] == self.target and float(top["confidence"]) >= self.threshold
-            )
-            return True, ai_recognized
-
-    async def finish_round(self, outcome: str) -> tuple[bool, CompletedSession | None]:
-        async with self.lock:
-            if self.status != "running" or self.target is None or self.session_id is None:
-                return False, None
-            self.ended_at = time.time()
-            self.outcome = outcome
             self.round_results.append(RoundResult(
                 round_number=self.round_number,
                 target=self.target,
-                score=self.best_target_confidence * 100.0,
-                outcome=outcome,
+                score=target_confidence * 100.0,
+                outcome=self.outcome or "done",
                 elapsed_seconds=self.elapsed(),
             ))
             if len(self.round_results) == TOTAL_ROUNDS:
@@ -229,6 +243,5 @@ class GameState:
             "outcome": self.outcome,
             "paths": self.paths,
             "predictions": self.predictions,
-            "threshold": self.threshold,
             "predictor": predictor_status,
         }

@@ -76,25 +76,28 @@
     result.classList.toggle('hidden', active);
     result.classList.toggle('session-final', data.status === 'session_complete');
     if (active) return;
-    if (data.status === 'session_complete') {
+    if (data.status === 'finalizing') {
+      $('#resultKicker').textContent = 'FINAL DRAWING SUBMITTED';
+      $('#resultMain').textContent = 'SCORING…';
+      $('#resultDetail').textContent = `ROUND ${data.round} / ${data.totalRounds}`;
+      $('#resultTime').textContent = 'AI RECOGNITION IN PROGRESS';
+    } else if (data.status === 'session_complete') {
       $('#resultKicker').textContent = 'SESSION COMPLETE';
       $('#resultMain').textContent = `${data.finalScore.toFixed(1)} / 100`;
       $('#resultDetail').textContent = data.playerName || '';
       $('#resultTime').textContent = data.leaderboardRank ? `LEADERBOARD #${data.leaderboardRank}` : 'SAVING SCORE';
     } else {
-      $('#resultKicker').textContent = data.outcome === 'ai_won' ? 'AI GOT IT!' :
-        data.outcome === 'timeout' ? "TIME'S UP!" : 'ROUND COMPLETE';
+      $('#resultKicker').textContent = data.outcome === 'timeout' ? "TIME'S UP!" : 'FINAL RESULT';
       $('#resultMain').textContent = `${Math.round(data.roundScore || 0)}%`;
       $('#resultDetail').textContent = `${data.target?.toUpperCase() || ''} · ROUND ${data.round} / ${data.totalRounds}`;
-      $('#resultTime').textContent = data.outcome === 'ai_won'
-        ? `${data.elapsed.toFixed(1)} SECONDS` : 'AI RECOGNITION SCORE';
+      $('#resultTime').textContent = 'AI RECOGNITION SCORE';
     }
   }
   function applyState(data) {
     state = data;
     clockOffset = Date.now() / 1000 - data.serverNow;
     redraw(data.paths || []);
-    round.textContent = data.round ? `ROUND ${data.round} / ${data.totalRounds} · LIVE DRAWING` : 'LIVE DRAWING';
+    round.textContent = data.round ? `ROUND ${data.round} / ${data.totalRounds} · ${data.status === 'finalizing' ? 'SCORING' : 'LIVE DRAWING'}` : 'LIVE DRAWING';
     empty.classList.toggle('hidden', data.status !== 'waiting');
     renderResult(data);
     renderPredictions(data.predictions || []);
@@ -103,7 +106,8 @@
     model.classList.toggle('error', !!data.predictor?.error || !data.predictor?.ready);
     footer.textContent = data.status === 'running' ? 'AI IS GUESSING' :
       data.status === 'waiting' ? 'WAITING FOR PLAYER' :
-      data.status === 'session_complete' ? 'FINAL SCORE RECORDED' : 'READY FOR NEXT ROUND';
+      data.status === 'session_complete' ? 'FINAL SCORE RECORDED' :
+      data.status === 'finalizing' ? 'SCORING DRAWING' : 'READY FOR NEXT ROUND';
     tick();
   }
   function tick() {

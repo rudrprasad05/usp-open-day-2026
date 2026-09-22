@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 logger = logging.getLogger("drawai")
 BASE_DIR = Path(__file__).resolve().parent
 
-game = GameState(settings.game_duration_seconds, settings.win_confidence_threshold)
+game = GameState(settings.game_duration_seconds)
 leaderboard = Leaderboard(Path(settings.leaderboard_db_path)) if settings.leaderboard_db_path else Leaderboard()
 manager = ConnectionManager()
 predictor: Predictor | None = None
@@ -64,11 +64,11 @@ def render_drawing(paths: list[list[dict]], size: int = 512) -> Image.Image | No
     return result
 
 
-async def predict_paths(paths: list[list[dict]]) -> list[dict]:
+async def predict_paths(paths: list[list[dict]], purpose: str = "live") -> list[dict]:
     if predictor is None or not predictor.ready:
         raise RuntimeError(predictor.error if predictor else "Predictor is not initialized")
     segment_count = sum(map(len, paths))
-    logger.info("[AI] Prediction requested")
+    logger.info("[AI] %s prediction requested", purpose.capitalize())
     logger.info("[AI] Rendering %d stroke segments", segment_count)
     image = render_drawing(paths)
     if image is None:
@@ -109,11 +109,25 @@ async def broadcast_leaderboard() -> None:
     )
 
 
-async def finish_current_round(outcome: str) -> None:
-    finished, completed = await game.finish_round(outcome)
+async def finalize_round(reason: str) -> None:
+    job = await game.begin_finalization(reason)
+    if job is None:
+        return
+    # Freeze input immediately, then score a fresh copy of the final drawing.
+    await broadcast_state()
+    try:
+        final_predictions = await predict_paths(job.paths, purpose="final")
+        if predictor:
+            predictor.error = None
+    except Exception as exc:
+        logger.exception("[AI ERROR] Final prediction failed; scoring round as 0%%")
+        if predictor:
+            predictor.error = f"Final prediction failed: {type(exc).__name__}: {exc}"
+        final_predictions = []
+    finished, completed = await game.complete_finalization(job, final_predictions)
     if not finished:
         return
-    logger.info("Round %d/%d finished: %s, score %.1f%%", game.round_number, 5, outcome, game.round_results[-1].score)
+    logger.info("Round %d/%d finished: %s, score %.1f%%", game.round_number, 5, game.outcome, game.round_results[-1].score)
     if completed:
         try:
             _, rank = await asyncio.to_thread(leaderboard.save_session, completed)
@@ -133,7 +147,7 @@ async def game_loop() -> None:
         if game.status != "running":
             continue
         if game.remaining() <= 0:
-            await finish_current_round("timeout")
+            await finalize_round("timeout")
             continue
         if not predictor or not predictor.ready or game.drawing_revision == game.predicted_revision:
             continue
@@ -159,20 +173,17 @@ async def game_loop() -> None:
         if game.status != "running" or round_number != game.round_number or structure_revision != game.structure_revision:
             continue
         if game.remaining() <= 0:
-            await finish_current_round("timeout")
+            await finalize_round("timeout")
             continue
         if not results:
             continue
         predictor.error = None
-        accepted, ai_recognized = await game.apply_predictions(results, round_number, structure_revision)
+        accepted = await game.apply_predictions(results, round_number, structure_revision)
         if not accepted:
             continue
         payload = {"type": "prediction", "predictions": results[:5]}
         logger.info("[WS] Broadcasting prediction to %d display client(s)", manager.count("display"))
         await manager.send_role("display", payload)
-        if ai_recognized:
-            logger.info("AI guessed %s in %.1fs", game.target, game.elapsed())
-            await finish_current_round("ai_won")
 
 
 @asynccontextmanager
@@ -312,8 +323,8 @@ async def websocket_endpoint(websocket: WebSocket, role: str):
             elif event == "undo":
                 await game.undo()
                 await broadcast_state()
-            elif event == "done":
-                await finish_current_round("done")
+            elif event in {"done", "finish_round"}:
+                await finalize_round("done")
             elif event == "ping":
                 await websocket.send_json({"type": "pong", "serverNow": time.time()})
     except WebSocketDisconnect:
