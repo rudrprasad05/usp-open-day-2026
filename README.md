@@ -56,6 +56,8 @@ The first server start downloads the configured OpenCLIP weights to the normal T
 
 Wait for `[AI] Predictor ready` in the log. If startup reports `[AI ERROR]`, inference is unavailable (drawing still works); read the full traceback and check dependencies, connectivity on first download, and cached weights. With the current OpenCLIP release, the configured ViT-B/32 weights were cached under `~/.cache/huggingface/hub/`; other pretrained tags may use `~/.cache/torch/hub/checkpoints/`. Keep the cache directory intact. After dependencies and weights are cached, DrawAI can run without internet access. The HTML uses system-font fallbacks offline; all application JavaScript and CSS is local.
 
+For authenticated Hugging Face downloads, put `HF_TOKEN=hf_...` in the project `.env` file. A file containing only a bare `hf_...` token also works. The predictor reads it before importing OpenCLIP/Hugging Face Hub, whether started with `./run.sh` or directly through Uvicorn. An already-set `HF_TOKEN` environment variable takes precedence. The token is never printed; `.env` is excluded from Git. The log says only where authentication was configured, not whether an online request succeeded.
+
 For an explicitly offline startup that never checks the model host, use `HF_HUB_OFFLINE=1 ./run.sh` after the first successful download. This was verified with the default ViT-B/32 weights.
 
 ## Run the demonstration
@@ -99,6 +101,7 @@ Environment variables keep common changes out of the code:
 | `PREDICTION_LOGIT_SCALE` | `25` | Softmax scaling for relative confidence; larger values make guesses more peaked |
 | `OPENCLIP_MODEL` | `ViT-B-32` | OpenCLIP model architecture |
 | `OPENCLIP_PRETRAINED` | `laion2b_s34b_b79k` | Pretrained weights identifier |
+| `HF_TOKEN` | unset | Hugging Face authentication token; may also be read from project `.env` |
 | `PUBLIC_HOST` | request host | QR-code host or origin |
 | `PORT` | `8888` in `run.sh` | Server port |
 | `SAVE_DEBUG_PREDICTION_IMAGES` | `false` | Overwrite `debug/prediction-latest.png` with the square image sent to the model |

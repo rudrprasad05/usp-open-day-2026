@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from PIL import Image
 
+from .hf_auth import configure_hf_token
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,9 @@ class Predictor:
         logger.info("[AI] Loading predictor...")
         logger.info("[AI] Model: %s (%s)", self.model_name, self.pretrained)
         try:
+            token_source = configure_hf_token()
+            if token_source != "none":
+                logger.info("[AI] Hugging Face authentication configured from %s", token_source)
             import open_clip
             import torch
 
