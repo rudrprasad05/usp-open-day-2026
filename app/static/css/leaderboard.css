@@ -30,3 +30,7 @@ h1 span{display:block;color:var(--blue)}
 .note{color:var(--muted);line-height:1.45;font-size:.85rem;margin:22px 0 0;max-width:700px}
 footer{background:var(--ink);color:#fff;display:flex;justify-content:space-between;gap:10px;padding:15px 3vw;font:700 .7rem "Space Mono",monospace;letter-spacing:.1em}
 @media(max-width:600px){.masthead{height:75px}.brand{font-size:0}.back-link{font-size:.75rem}.connection span{display:none}main{padding-top:25px}.title-row{margin-bottom:23px}.trophy{display:none}.board-head,.entry{grid-template-columns:35px minmax(0,1fr) 72px;gap:8px}.board-head{padding:13px 12px}.entry{padding:10px 12px;font-size:.9rem;min-height:57px}.entry strong{font-size:.95rem}.entry.rank-1{min-height:69px}footer{font-size:.55rem}}
+.brand:focus-visible,.play-link:focus-visible,.back-link:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:5px}
+.play-link,.back-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 10px;border-radius:8px;color:var(--ink);font-weight:800;font-size:.86rem;text-decoration:none;white-space:nowrap}
+.play-link:hover,.back-link:hover{background:#eef1fa}
+@media(max-width:600px){.masthead{gap:4px;padding:0 2vw}.play-link,.back-link{padding:0 6px;font-size:.72rem}.brand{margin-right:auto}}

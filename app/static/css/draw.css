@@ -34,3 +34,18 @@
 .final-action{width:100%;margin-top:13px;background:#fff;color:var(--ink)}
 .text-action{border:0;background:none;color:var(--muted);font:800 .88rem "DM Sans",system-ui,sans-serif;padding:16px}
 @media(max-height:700px){.entry-screen{padding-top:5vh}.round-progress{margin-bottom:8px}}
+
+.topbar{gap:8px;flex-wrap:wrap}
+.topbar .brand{color:var(--ink);text-decoration:none;min-height:44px}
+.phone-nav{display:flex;align-items:center;gap:4px;margin-left:auto}
+.phone-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 9px;border-radius:8px;color:var(--ink);font-size:.76rem;font-weight:800;text-decoration:none}
+.phone-nav a:hover{background:#e8ecf8}
+.phone-nav a:focus-visible,.topbar .brand:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.global-status{min-height:0;margin:0;padding:0;color:#7b1e20;font-size:.78rem;font-weight:700;line-height:1.25}
+.global-status:not(:empty){min-height:22px;padding:3px 2px}
+.global-status.error{color:#a31922}
+.reconnect-overlay{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:24px;text-align:center;background:rgba(9,11,16,.88);color:#fff}
+.reconnect-overlay strong{font-size:1.35rem}
+.reconnect-overlay span{max-width:290px;font-size:.9rem;line-height:1.4}
+button:focus-visible,.next:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+@media(max-width:380px){.phone-shell{padding-left:12px;padding-right:12px}.phone-nav a{padding:0 6px;font-size:.7rem}.topbar{gap:4px}.connection{padding:6px 7px;font-size:.68rem}}

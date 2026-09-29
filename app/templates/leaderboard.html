@@ -11,6 +11,7 @@
 <body>
   <header class="masthead">
     <a class="brand" href="/display"><span class="brand-mark">D</span><span>DrawAI</span></a>
+    <a class="play-link" href="/draw">Draw / Play</a>
     <a class="back-link" href="/display">← Live game</a>
     <div id="connection" class="connection offline"><i></i><span>Connecting</span></div>
   </header>
@@ -20,7 +21,7 @@
       <div class="board-head"><span>#</span><span>PLAYER</span><span>SCORE</span></div>
       <ol id="leaderboardEntries"><li class="empty">First scores coming soon</li></ol>
     </section>
-    <p class="note">Each score is the average of five drawings. The AI's highest recognition confidence for the requested object counts in each round.</p>
+    <p class="note">Each submitted drawing is scored using the AI’s confidence in the requested object. Complete all five drawings to earn a leaderboard total.</p>
   </main>
   <footer><span>FIVE DRAWINGS · ONE SCORE</span><span id="updated">LIVE RESULTS</span></footer>
 </body>

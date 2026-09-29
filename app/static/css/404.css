@@ -1,0 +1,14 @@
+:root{--blue:#1557ff;--ink:#090b10;--yellow:#ffd84d;--paper:#f3f4f8;--muted:#717684}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:system-ui,sans-serif;color:var(--ink);background:var(--paper)}
+body{min-height:100vh;display:grid;place-items:center;padding:24px;background-image:linear-gradient(rgba(12,14,20,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(12,14,20,.035) 1px,transparent 1px);background-size:34px 34px}
+.not-found{width:min(100%,560px);padding:clamp(24px,7vw,52px);border:3px solid var(--ink);border-radius:16px;background:#fff;box-shadow:7px 7px 0 var(--ink)}
+.brand{display:inline-flex;align-items:center;gap:10px;color:var(--ink);font-size:1.2rem;font-weight:900;text-decoration:none}
+.brand-mark{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--blue);color:#fff;font-weight:900;transform:rotate(-4deg);box-shadow:3px 3px 0 var(--ink)}
+.eyebrow{margin:38px 0 8px;color:var(--blue);font-size:.78rem;font-weight:900;letter-spacing:.13em}
+h1{margin:0;font-size:clamp(2.2rem,9vw,4rem);line-height:1;letter-spacing:-.06em}
+.explanation{margin:16px 0 26px;color:var(--muted);line-height:1.5}
+nav{display:grid;gap:10px}
+nav a{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 15px;border:2px solid var(--ink);border-radius:9px;color:var(--ink);font-weight:800;text-decoration:none}
+nav a.primary{background:var(--yellow)}
+a:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
