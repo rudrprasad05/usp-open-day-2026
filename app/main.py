@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -226,6 +227,17 @@ async def display_page(request: Request):
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def leaderboard_page(request: Request):
     return templates.TemplateResponse(request, "leaderboard.html")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    accepts_html = "text/html" in request.headers.get("accept", "")
+    is_browser_page = not request.url.path.startswith(("/api/", "/ws/"))
+    if exc.status_code == 404 and accepts_html and is_browser_page:
+        return templates.TemplateResponse(
+            request, "404.html", {"requested_path": request.url.path}, status_code=404
+        )
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
 
 
 def draw_url(request: Request) -> str:

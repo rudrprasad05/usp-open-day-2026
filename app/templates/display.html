@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0b0d12">
-  <title>Can You Beat the AI? — DrawAI</title>
+  <title>Draw Fast. Rank High. — DrawAI</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/css/display.css') }}">
   <script src="{{ url_for('static', path='/js/display.js') }}" defer></script>
 </head>
 <body>
   <header class="masthead">
-    <div class="brand"><span class="brand-mark">D</span><span>DrawAI</span></div>
-    <h1>CAN YOU <em>BEAT</em> THE AI?</h1>
+    <a class="brand" href="/display" aria-label="DrawAI Home"><span class="brand-mark">D</span><span>DrawAI</span></a>
+    <nav class="display-nav" aria-label="Main navigation"><a href="/draw">Draw / Play</a></nav>
+    <div class="display-heading"><h1>DRAW FAST. <em>RANK HIGH.</em></h1><p>Complete each drawing in 30 seconds, watch the AI predict it, and climb the leaderboard.</p></div>
     <div id="connection" class="connection offline"><i></i><span>Connecting</span></div>
   </header>
   <main class="arena">

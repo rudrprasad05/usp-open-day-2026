@@ -11,9 +11,14 @@
 <body>
   <main class="phone-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">D</span><span>DrawAI</span></div>
+      <a class="brand" href="/display" aria-label="DrawAI Home"><span class="brand-mark">D</span><span>DrawAI</span></a>
+      <nav class="phone-nav" aria-label="Main navigation">
+        <a href="/display">Home</a>
+        <a href="/leaderboard">Leaderboard</a>
+      </nav>
       <div id="connection" class="connection offline"><i></i><span>Connecting</span></div>
     </header>
+    <p id="globalStatus" class="global-status" role="status" aria-live="polite" aria-atomic="true"></p>
     <section id="entryScreen" class="entry-screen">
       <p class="eyebrow">Five drawings · One score</p>
       <h1>Ready to draw?</h1>
@@ -22,7 +27,7 @@
         <label for="playerName">Enter your name / nickname / school</label>
         <input id="playerName" name="playerName" maxlength="40" autocomplete="nickname" required>
         <p id="entryError" class="form-error" role="alert"></p>
-        <button class="primary" type="submit">START GAME <span aria-hidden="true">→</span></button>
+        <button id="startGame" class="primary" type="submit">START GAME <span aria-hidden="true">→</span></button>
       </form>
       <div class="entry-footer">5 unique objects · 30 seconds each</div>
     </section>
@@ -37,6 +42,10 @@
       <div id="progress" class="round-progress" aria-label="Five round progress"></div>
       <div class="canvas-wrap">
         <canvas id="canvas" aria-label="Drawing canvas"></canvas>
+        <div id="reconnectOverlay" class="reconnect-overlay hidden" role="status" aria-live="assertive">
+          <strong>Reconnecting…</strong>
+          <span>Drawing is temporarily paused. The timer continues on the server.</span>
+        </div>
         <div id="canvasMessage" class="canvas-message hidden">
           <span id="resultKicker" class="eyebrow">Round complete</span>
           <strong id="resultTitle">CAT</strong>
@@ -50,7 +59,7 @@
         <button id="done" class="done" disabled>Done <span aria-hidden="true">→</span></button>
       </div>
       <button id="next" class="next hidden">Next drawing <span aria-hidden="true">→</span></button>
-      <p id="playHint" class="hint">Draw with your finger or stylus</p>
+      <p id="playHint" class="hint">Draw with your finger or stylus. Refreshing reconnects to this round; the timer continues.</p>
     </section>
     <section id="finalScreen" class="final-screen hidden">
       <p class="eyebrow">Five rounds complete</p>

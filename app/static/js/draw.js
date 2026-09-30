@@ -13,13 +13,23 @@
   const entryForm = $('#entryForm');
   const playerName = $('#playerName');
   const entryError = $('#entryError');
+  const globalStatus = $('#globalStatus');
+  const reconnectOverlay = $('#reconnectOverlay');
+  const startGame = $('#startGame');
   const message = $('#canvasMessage');
   const next = $('#next');
   const undo = $('#undo');
   const clear = $('#clear');
   const done = $('#done');
+  const playAgain = $('#playAgain');
   let socket, reconnectTimer, state = {}, drawing = false, last = null, pathId = null;
   let clockOffset = 0, entryForced = false, finalRevealed = true;
+  let connected = false, awaitingSnapshot = true, hadConnectionLoss = false, pendingAction = null;
+  let navigationApproved = false;
+
+  const isRoundActive = () => state.status === 'running' || state.status === 'finalizing';
+  const canSend = () => connected && !awaitingSnapshot && socket?.readyState === WebSocket.OPEN;
+  const canDraw = () => canSend() && state.status === 'running' && !pendingAction;
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
@@ -55,7 +65,7 @@
     else lastPath.push(segment);
   }
   function begin(event) {
-    if (state.status !== 'running') return;
+    if (!canDraw()) return;
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
     drawing = true;
@@ -63,7 +73,7 @@
     pathId = `${Date.now()}-${event.pointerId}`;
   }
   function move(event) {
-    if (!drawing || !last) return;
+    if (!drawing || !last || !canDraw()) return;
     event.preventDefault();
     const current = point(event);
     const segment = {type: 'stroke', pathId, x1: last.x, y1: last.y,
@@ -79,29 +89,109 @@
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
 
+  function setStatus(text, kind = 'status') {
+    globalStatus.textContent = text;
+    globalStatus.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    globalStatus.classList.toggle('error', kind === 'error');
+  }
   function send(data) {
-    if (socket?.readyState !== WebSocket.OPEN) return false;
-    socket.send(JSON.stringify(data));
-    return true;
+    if (!canSend()) return false;
+    try {
+      socket.send(JSON.stringify(data));
+      return true;
+    } catch {
+      setStatus('Connection lost. Reconnecting…', 'error');
+      return false;
+    }
   }
   function connect() {
     clearTimeout(reconnectTimer);
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
     socket = new WebSocket(`${protocol}://${location.host}/ws/draw`);
     socket.onopen = () => {
+      connected = true;
+      awaitingSnapshot = true;
       connection.classList.remove('offline');
-      connection.querySelector('span').textContent = 'Connected';
+      connection.querySelector('span').textContent = 'Syncing';
+      updateControls();
     };
     socket.onclose = () => {
+      connected = false;
+      awaitingSnapshot = true;
+      drawing = false; last = null;
+      if (isRoundActive()) hadConnectionLoss = true;
       connection.classList.add('offline');
       connection.querySelector('span').textContent = 'Reconnecting';
+      if (isRoundActive()) setStatus('Connection lost. Reconnecting…', 'error');
+      updateControls();
       reconnectTimer = setTimeout(connect, 1200);
     };
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'state') applyState(data);
-      else if (data.type === 'error') entryError.textContent = data.message;
+    socket.onerror = () => {
+      if (isRoundActive()) setStatus('Connection problem. Reconnecting…', 'error');
     };
+    socket.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); }
+      catch { setStatus('Received an unreadable update. Reconnecting…', 'error'); return; }
+      if (data.type === 'state') {
+        const wasWaitingForSnapshot = awaitingSnapshot;
+        awaitingSnapshot = false;
+        if (wasWaitingForSnapshot || (pendingAction && confirmsPendingAction(data))) pendingAction = null;
+        applyState(data);
+        if (hadConnectionLoss && wasWaitingForSnapshot) {
+          hadConnectionLoss = false;
+          setStatus('Connection restored. Current game state reloaded.');
+        } else {
+          setStatus('');
+        }
+        updateControls();
+      } else if (data.type === 'error') {
+        pendingAction = null;
+        setStatus(data.message || 'That action could not be completed. Please try again.', 'error');
+        updateControls();
+      }
+    };
+  }
+  function confirmsPendingAction(data) {
+    if (pendingAction === 'start' || pendingAction === 'playAgain') return data.status === 'running';
+    if (pendingAction === 'done') return ['finalizing', 'round_complete', 'session_complete'].includes(data.status);
+    if (pendingAction?.type === 'next') return data.status === 'running' && data.round > pendingAction.round;
+    return false;
+  }
+  function submitAction(action, payload, pendingLabel) {
+    if (pendingAction || !canSend()) {
+      setStatus(canSend() ? 'Please wait for the current action to finish.' : 'Waiting for a connection. Please try again.', 'error');
+      return false;
+    }
+    if (!send(payload)) {
+      setStatus('The action was not sent. Please try again when connected.', 'error');
+      return false;
+    }
+    pendingAction = action;
+    setStatus(pendingLabel);
+    updateControls();
+    return true;
+  }
+  function updateControls() {
+    const online = canSend();
+    const active = state.status === 'running';
+    const pending = !!pendingAction;
+    startGame.disabled = !online || pending;
+    undo.disabled = !online || !active || pending;
+    clear.disabled = !online || !active || pending;
+    done.disabled = !online || !active || pending;
+    next.disabled = !online || pending || !(state.status === 'round_complete' || state.status === 'session_complete');
+    playAgain.disabled = !online || pending;
+    $('#newPlayer').disabled = pending;
+    reconnectOverlay.classList.toggle('hidden', !(isRoundActive() && (!connected || awaitingSnapshot)));
+    canvas.style.pointerEvents = canDraw() ? 'auto' : 'none';
+    if (pendingAction === 'start') startGame.textContent = 'Starting…';
+    else startGame.innerHTML = 'START GAME <span aria-hidden="true">→</span>';
+    done.textContent = pendingAction === 'done' ? 'Submitting…' : 'Done →';
+    next.textContent = pendingAction?.type === 'next' ? 'Loading next drawing…' :
+      pendingAction === 'playAgain' ? 'Starting new game…' :
+      state.status === 'session_complete' ? 'See final score →' : 'Next drawing →';
+    playAgain.textContent = pendingAction === 'playAgain' ? 'Starting new game…' : 'Play again';
   }
   function renderProgress(data) {
     progress.replaceChildren();
@@ -131,7 +221,7 @@
     }
   }
   function applyState(data) {
-    const wasActive = state.status === 'running' || state.status === 'finalizing';
+    const wasActive = isRoundActive();
     state = data;
     clockOffset = Date.now() / 1000 - data.serverNow;
     if (data.status !== 'session_complete') entryForced = false;
@@ -148,14 +238,9 @@
       target.textContent = `Draw: ${data.target?.toUpperCase() || ''}`;
       renderProgress(data);
       redraw(data.paths || []);
-      const running = data.status === 'running';
-      [undo, clear, done].forEach(button => button.disabled = !running);
-      next.classList.toggle('hidden', running || data.status === 'finalizing');
-      next.innerHTML = data.status === 'session_complete'
-        ? 'See final score <span aria-hidden="true">→</span>'
-        : 'Next drawing <span aria-hidden="true">→</span>';
-      message.classList.toggle('hidden', running);
-      if (!running) {
+      next.classList.toggle('hidden', data.status === 'running' || data.status === 'finalizing');
+      message.classList.toggle('hidden', data.status === 'running');
+      if (data.status !== 'running') {
         $('#resultKicker').textContent = data.status === 'finalizing' ? 'Scoring your drawing…' :
           data.outcome === 'timeout' ? "Time's up!" : 'Round complete';
         $('#resultTitle').textContent = data.target?.toUpperCase() || '';
@@ -164,6 +249,7 @@
       }
     }
     tick();
+    updateControls();
   }
   function tick() {
     let remaining = state.remaining ?? 30;
@@ -173,31 +259,45 @@
     timer.classList.toggle('danger', remaining <= 5 && state.status === 'running');
   }
 
+  function confirmNavigation(event) {
+    if (!isRoundActive()) return;
+    event.preventDefault();
+    if (window.confirm('Your round will continue and the timer will keep running if you leave this page.')) {
+      navigationApproved = true;
+      location.href = event.currentTarget.href;
+    }
+  }
+  document.querySelectorAll('.phone-nav a, .topbar .brand').forEach(link => link.addEventListener('click', confirmNavigation));
+  window.addEventListener('beforeunload', (event) => {
+    if (!isRoundActive() || navigationApproved) return;
+    event.preventDefault();
+    event.returnValue = 'Your round will continue and the timer will keep running if you leave this page.';
+  });
+
   entryForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const name = playerName.value.trim();
     if (!name) { entryError.textContent = 'Please enter a name.'; return; }
-    if (!send({type: 'start', playerName: name})) {
-      entryError.textContent = 'Waiting for a connection. Please try again.';
-      return;
-    }
-    entryError.textContent = '';
+    if (submitAction('start', {type: 'start', playerName: name}, 'Starting…')) entryError.textContent = '';
   });
   next.onclick = () => {
     if (state.status === 'session_complete') {
       finalRevealed = true;
       applyState(state);
-    } else send({type: 'next'});
+      return;
+    }
+    submitAction({type: 'next', round: state.round}, {type: 'next'}, 'Loading next drawing…');
   };
   undo.onclick = () => send({type: 'undo'});
   clear.onclick = () => send({type: 'clear'});
-  done.onclick = () => send({type: 'finish_round'});
-  $('#playAgain').onclick = () => send({type: 'start', playerName: state.playerName});
+  done.onclick = () => submitAction('done', {type: 'finish_round'}, 'Submitting…');
+  playAgain.onclick = () => submitAction('playAgain', {type: 'start', playerName: state.playerName}, 'Starting new game…');
   $('#newPlayer').onclick = () => {
     entryForced = true;
     playerName.value = '';
     entryError.textContent = '';
     applyState(state);
+    playerName.focus();
   };
   setInterval(tick, 100);
   new ResizeObserver(resize).observe(canvas);

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#1557ff">
+  <title>Page not found — DrawAI</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/404.css') }}">
+</head>
+<body>
+  <main class="not-found">
+    <a class="brand" href="/display"><span class="brand-mark">D</span><span>DrawAI</span></a>
+    <p class="eyebrow">404 · WRONG TURN</p>
+    <h1>We couldn’t find that page.</h1>
+    <p class="explanation">Head back to the live display, open the drawing board, or check the scores.</p>
+    <nav aria-label="DrawAI pages">
+      <a class="primary" href="/display">Home / Live Display <span aria-hidden="true">→</span></a>
+      <a href="/draw">Drawing Board <span aria-hidden="true">→</span></a>
+      <a href="/leaderboard">Leaderboard <span aria-hidden="true">→</span></a>
+    </nav>
+  </main>
+</body>
+</html>

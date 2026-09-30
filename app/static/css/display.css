@@ -13,3 +13,19 @@
 .mini-board li.board-empty{display:block;color:var(--muted);border:0}
 .join-card{margin-top:auto;padding-top:14px}
 @media(max-height:800px) and (min-width:901px){.ai-card{padding:18px}.predictions{gap:8px}.prediction.top{padding:10px}.mini-board li{padding:3px 0}.join-card img{width:58px;height:58px}}
+.masthead{grid-template-columns:190px 140px minmax(0,1fr) 190px}
+.masthead .brand{min-height:44px;color:var(--ink);text-decoration:none}
+.masthead .brand:focus-visible,.display-nav a:focus-visible,.mini-board a:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:5px}
+.display-nav{display:flex;align-items:center}
+.display-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border:2px solid var(--ink);border-radius:9px;background:var(--blue);color:#fff;font-size:.8rem;font-weight:900;text-decoration:none;box-shadow:2px 2px 0 var(--ink)}
+.display-heading{min-width:0;text-align:center}
+.display-heading h1{font-size:clamp(1.5rem,2.55vw,3rem)}
+.display-heading p{margin:5px 0 0;font-size:.75rem;line-height:1.25;color:var(--muted);font-weight:700}
+.mini-board a{display:inline-flex;align-items:center;min-height:44px}
+@media(max-width:900px){.masthead{grid-template-columns:1fr auto;height:auto;min-height:95px;padding:10px 3vw;gap:5px}.masthead .display-heading{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:min(54vw,520px)}.display-heading h1{font-size:clamp(1.05rem,2.5vw,1.65rem)}.display-heading p{font-size:.65rem}.display-nav{grid-column:2;grid-row:1}.connection{grid-column:2;grid-row:2;justify-self:end;margin-top:2px}}
+@media(max-width:600px){.masthead .display-heading{width:50vw;top:10px}.display-heading h1{font-size:1rem}.display-heading p{font-size:.58rem}.display-nav a{min-height:44px;padding:0 8px;font-size:.72rem}.masthead .brand{font-size:0}}
+.masthead .display-heading h1{position:static;left:auto;transform:none;white-space:normal}
+.join-card{gap:12px;padding-top:12px}
+.join-card img{display:block;flex:0 0 auto;width:clamp(150px,12vw,170px);height:auto;aspect-ratio:1 / 1;object-fit:contain;background:#fff;border:3px solid var(--ink);padding:7px}
+@media(max-width:1200px){.join-card img{width:120px}}
+@media(max-width:440px){.join-card{flex-direction:column;align-items:flex-start;gap:9px}.join-card div{max-width:100%}}
